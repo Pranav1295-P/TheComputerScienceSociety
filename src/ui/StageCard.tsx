@@ -1,0 +1,172 @@
+import { useEffect, useMemo, useState } from 'react'
+import { printAlgo } from '../engine/code'
+import { ALGOS } from '../engine/ops'
+import type { Tone } from '../engine/rec'
+import { Stage } from '../stage/Scene'
+import { useLab } from '../store'
+
+const TONE: Record<Tone, string> = {
+  info: 'Station note', make: 'New wagon', link: 'Coupling', cut: 'Uncoupling', walk: 'Inspector', warn: 'Caution', done: 'Arrived',
+}
+
+function usePlayer() {
+  const playing = useLab((s) => s.playing)
+  const idx = useLab((s) => s.idx)
+  const speed = useLab((s) => s.speed)
+  useEffect(() => {
+    if (!playing) return
+    const t = setTimeout(() => useLab.getState().next(), 3000 / speed)
+    return () => clearTimeout(t)
+  }, [playing, idx, speed])
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement
+      if (el.closest('input, select, textarea, button')) return
+      const lab = useLab.getState()
+      if (e.key === 'ArrowRight') lab.next()
+      else if (e.key === 'ArrowLeft') lab.prev()
+      else if (e.key === ' ') {
+        e.preventDefault()
+        lab.toggle()
+      }
+    }
+    window.addEventListener('keydown', on)
+    return () => window.removeEventListener('keydown', on)
+  }, [])
+}
+
+function Quiz() {
+  const quizFor = useLab((s) => s.quizFor)!
+  const target = useLab((s) => s.steps[quizFor])
+  const lang = useLab((s) => s.lang)
+  const resolve = useLab((s) => s.resolveQuiz)
+  const [wrong, setWrong] = useState<string[]>([])
+  const options = useMemo(() => {
+    const lines = printAlgo(ALGOS[target.algo!], lang).filter((l) => l.tag)
+    const at = lines.findIndex((l) => l.tag === target.line)
+    const near = lines
+      .filter((l) => l.tag !== target.line && l.text.includes('='))
+      .sort((a, b) => Math.abs(lines.indexOf(a) - at) - Math.abs(lines.indexOf(b) - at))
+      .slice(0, 2)
+    const all = [lines[at], ...near]
+    const shift = quizFor % all.length
+    return [...all.slice(shift), ...all.slice(0, shift)]
+  }, [target, lang, quizFor])
+
+  return (
+    <div className="quiz" role="group" aria-label="Predict the next line">
+      <h3>Before the train moves: which line runs next?</h3>
+      <div className="quiz-opts">
+        {options.map((o) => (
+          <button
+            key={o.tag}
+            className={wrong.includes(o.tag!) ? 'wrong' : ''}
+            disabled={wrong.includes(o.tag!)}
+            onClick={() => (o.tag === target.line ? resolve() : setWrong((w) => [...w, o.tag!]))}
+          >
+            <code>{o.text.trim()}</code>
+          </button>
+        ))}
+      </div>
+      <p className="quiz-note" aria-live="polite">{wrong.length ? 'Not this one. Ask which coupling would be lost, or which value is not ready yet.' : 'Think about what must stay reachable.'}</p>
+    </div>
+  )
+}
+
+function Board() {
+  const step = useLab((s) => s.steps[s.idx])
+  const idx = useLab((s) => s.idx)
+  const total = useLab((s) => s.steps.length)
+  const quizFor = useLab((s) => s.quizFor)
+  return (
+    <section className={`board tone-${step.tone}`} aria-live="polite">
+      {quizFor !== null ? (
+        <Quiz key={quizFor} />
+      ) : (
+        <div className="board-in" key={idx + step.title}>
+            <header>
+              <span className="tone-chip">{TONE[step.tone]}</span>
+              <span className="count">Step {idx + 1} of {total}</span>
+            </header>
+            <h2>{step.title}</h2>
+            <div className="explain">
+              <div>
+                <h4>On the track</h4>
+                <p>{step.train}</p>
+              </div>
+              <div>
+                <h4>In memory</h4>
+                <p>{step.code}</p>
+              </div>
+            </div>
+            {step.ledger && (
+              <dl className="ledger">
+                {step.ledger.map((l) => (
+                  <div key={l.label}>
+                    <dt>{l.label}</dt>
+                    <dd>{l.value}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function Transport() {
+  const { idx, playing, speed, goto, next, prev, toggle, setSpeed } = useLab()
+  const total = useLab((s) => s.steps.length)
+  const atEnd = idx >= total - 1
+  return (
+    <div className="transport">
+      <button onClick={() => goto(0)} aria-label="First step" title="First step">⏮</button>
+      <button onClick={prev} aria-label="Previous step" title="Previous step (left arrow)">◀</button>
+      <button className="play" onClick={toggle} aria-label={playing ? 'Pause' : 'Play'} title="Play or pause (space)">
+        {playing ? 'Pause' : atEnd && total > 1 ? 'Replay' : 'Play'}
+      </button>
+      <button onClick={next} aria-label="Next step" title="Next step (right arrow)">▶</button>
+      <button onClick={() => goto(total - 1)} aria-label="Last step" title="Last step">⏭</button>
+      <input type="range" min={0} max={Math.max(0, total - 1)} value={idx} aria-label="Scrub through steps" onChange={(e) => goto(Number(e.target.value))} />
+      <label>
+        Speed
+        <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+          {[0.5, 1, 1.5, 2, 3].map((s) => (
+            <option key={s} value={s}>{s}×</option>
+          ))}
+        </select>
+      </label>
+    </div>
+  )
+}
+
+export function StageCard() {
+  usePlayer()
+  const view = useLab((s) => s.view)
+  const forced = useLab((s) => s.steps[s.idx].view)
+  const setView = useLab((s) => s.setView)
+  const resetCam = useLab((s) => s.resetCam)
+  const shown = forced ?? view
+  return (
+    <section className="stagecard">
+      <div className="canvas-wrap">
+        <Stage />
+        <ul className="legend" aria-label="Legend">
+          <li><i style={{ background: '#6ff0c0' }} />head</li>
+          <li><i style={{ background: '#ffd23f' }} />next</li>
+          <li><i style={{ background: '#ff7a59' }} />prev</li>
+          <li><i className="dash" />just cut</li>
+        </ul>
+        <div className="view-toggle">
+          <button className={shown === 'track' ? 'on' : ''} onClick={() => setView('track')}>Track</button>
+          <button className={shown === 'memory' ? 'on' : ''} onClick={() => setView('memory')}>Memory yard</button>
+          <button onClick={resetCam} title="Reset camera">Recenter</button>
+        </div>
+        <p className="drag-hint">Drag to orbit. Scroll to zoom.</p>
+      </div>
+      <Board />
+      <Transport />
+    </section>
+  )
+}
