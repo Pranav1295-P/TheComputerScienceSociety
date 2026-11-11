@@ -11,6 +11,20 @@ Singly, doubly and circular linked lists, taught as a train you can couple, unco
 - **Practice**: 10 standard and 10 MAANG-style LeetCode problems with hints, plans, edge cases and solutions. Ten have 3D walkthroughs.
 - **Reference**: complexity table, train-to-code dictionary, patterns and a pre-submit checklist.
 
+## Lab: CSE-Array-Bookshelf
+
+Arrays as a library shelf: numbered slots, instant access by index, shifting on insert and delete, doubling when full, and linear and binary search.
+
+## Lab: CSE-Stack-Tiffin
+
+Stacks as a tiffin carrier: push, pop, peek, overflow and underflow, the call stack, and why the middle is out of reach.
+
+## Lab: CSE-Queue-Tirumala-Darshan
+
+Queues as the darshan line at Tirumala: linear, circular, deque and priority queues, including the false-full problem.
+
+Each of these labs has guided lessons, a step-through simulator, 10 interview problems with 3D walkthroughs for two of them, and a reference page.
+
 ## Run locally
 
 ```bash

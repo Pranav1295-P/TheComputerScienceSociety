@@ -1,8 +1,8 @@
 import { LANGS, printAlgo, tokenize, type Lang } from '../engine/code'
-import { ALGOS } from '../engine/ops'
 import { ENGINE_ID } from '../engine/rec'
 import { POINTER_COLORS } from '../stage/Scene'
 import { useLab } from '../store'
+import { usePlayerApi } from './player'
 
 export function LangTabs({ options = LANGS }: { options?: { id: Lang; label: string }[] }) {
   const lang = useLab((s) => s.lang)
@@ -40,9 +40,10 @@ export function CodeBlock({ source, lang }: { source: string; lang: Lang }) {
 }
 
 export function CodePanel() {
-  const step = useLab((s) => s.steps[s.idx])
+  const api = usePlayerApi()
+  const step = api.useStore((s) => s.steps[s.idx])
   const lang = useLab((s) => s.lang)
-  const algo = step.algo ? ALGOS[step.algo] : null
+  const algo = step.algo ? api.algos[step.algo] : null
   return (
     <section className="panel">
       <header>
@@ -60,7 +61,7 @@ export function CodePanel() {
       ) : (
         <p className="muted">Run an operation and its code appears here, with the current line lit.</p>
       )}
-      {algo && <p className="muted small">head and tail are fields of the list, shown bare for readability.</p>}
+      {algo && <p className="muted small">{api.codeNote}</p>}
     </section>
   )
 }

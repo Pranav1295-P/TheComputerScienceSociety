@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { SEQ_LABS } from './seq/defs'
 import { Home } from './ui/Home'
-import { LAB_SLUG, LAB_TABS, Learn, Practice, ProblemDetail, Reference, Simulator } from './ui/Pages'
+import { LAB_SLUG, LAB_TABS, Learn, LinkedListPractice, Reference, Simulator } from './ui/Pages'
+import { SeqLabPage } from './ui/SeqLab'
 
 const SOCIETY = 'TheComputerScienceSociety'
 const TAGLINE = 'A Community Of Relativity'
@@ -21,11 +23,15 @@ function useRoute() {
 
 export function App() {
   const route = useRoute()
-  const inLab = route[0] === LAB_SLUG
+  const slug = route[0]
+  const seq = SEQ_LABS.find((l) => l.slug === slug)
+  const isList = slug === LAB_SLUG
+  const inLab = isList || !!seq
   const tab = route[1] ?? 'learn'
+  const labName = seq ? seq.name : 'CSE-Linked-List-Express'
 
   return (
-    <div className="app">
+    <div className="app" data-lab={seq?.engine.id ?? (isList ? 'list' : 'home')}>
       <header className="topbar">
         <a className="brand" href="#/">
           <span className="brand-mark" aria-hidden />
@@ -36,10 +42,10 @@ export function App() {
         </a>
         {inLab && (
           <>
-            <span className="lab-tag">CSE-Linked-List-Express</span>
+            <span className="lab-tag">{labName}</span>
             <nav aria-label="Lab sections">
               {LAB_TABS.map((t) => (
-                <a key={t.id} href={`#/${LAB_SLUG}/${t.id}`} className={tab === t.id ? 'on' : ''} aria-current={tab === t.id ? 'page' : undefined}>
+                <a key={t.id} href={`#/${slug}/${t.id}`} className={tab === t.id ? 'on' : ''} aria-current={tab === t.id ? 'page' : undefined}>
                   {t.label}
                 </a>
               ))}
@@ -49,11 +55,11 @@ export function App() {
       </header>
       <main>
         {!inLab && <Home />}
-        {inLab && tab === 'learn' && <Learn />}
-        {inLab && tab === 'simulator' && <Simulator />}
-        {inLab && tab === 'practice' && !route[2] && <Practice />}
-        {inLab && tab === 'practice' && route[2] && <ProblemDetail key={route[2]} n={Number(route[2])} />}
-        {inLab && tab === 'reference' && <Reference />}
+        {isList && tab === 'learn' && <Learn />}
+        {isList && tab === 'simulator' && <Simulator />}
+        {isList && tab === 'practice' && <LinkedListPractice sub={route[2]} />}
+        {isList && tab === 'reference' && <Reference />}
+        {seq && <SeqLabPage key={seq.slug} def={seq} tab={tab} sub={route[2]} />}
       </main>
     </div>
   )

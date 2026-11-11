@@ -16,10 +16,11 @@ export interface CodeLine {
 export interface Algo {
   name: string
   params: string[]
+  ret?: string
   body: { dsl: string; indent: number; tag?: string }[]
 }
 
-export function algo(name: string, params: string[], src: string): Algo {
+export function algo(name: string, params: string[], src: string, ret?: string): Algo {
   const body = src
     .split('\n')
     .filter((l) => l.trim())
@@ -28,7 +29,7 @@ export function algo(name: string, params: string[], src: string): Algo {
       const m = raw.trim().match(/^(.*?)\s+@(\w+)$/)
       return { dsl: m ? m[1] : raw.trim(), tag: m?.[2], indent }
     })
-  return { name, params, body }
+  return { name, params, ret, body }
 }
 
 function expr(s: string, lang: Lang) {
@@ -38,9 +39,11 @@ function expr(s: string, lang: Lang) {
       .replace(/!= null/g, 'is not None')
       .replace(/\bnull\b/g, 'None')
       .replace(/\btrue\b/g, 'True')
+      .replace(/\bfalse\b/g, 'False')
+      .replace(/ \/ /g, ' // ')
       .replace(/\bnew\(/g, 'Node(')
   }
-  let out = s.replace(/\bnew\(/g, 'new Node(')
+  let out = s.replace(/\bnew\(/g, 'new Node(').replace(/ and /g, ' && ')
   if (lang === 'cpp') {
     out = out.replace(/\bnull\b/g, 'nullptr').replace(/\.(next|prev|val)\b/g, '->$1')
   }
@@ -54,6 +57,20 @@ function stmt(s: string, lang: Lang): string {
     const c = lang === 'java' ? '//' : '#'
     return `${c} garbage collector reclaims ${free[1]}`
   }
+  const thrown = s.match(/^throw "(.+)"$/)
+  if (thrown) {
+    if (lang === 'python') return `raise Exception("${thrown[1]}")`
+    return lang === 'java' ? `throw new RuntimeException("${thrown[1]}");` : `throw runtime_error("${thrown[1]}");`
+  }
+  const block = s.match(/^array (\w+) = (.+)$/)
+  if (block) {
+    if (lang === 'python') return `${block[1]} = [0] * (${block[2]})`
+    return lang === 'java' ? `int[] ${block[1]} = new int[${block[2]}];` : `int* ${block[1]} = new int[${block[2]}];`
+  }
+  const num = s.match(/^int (\w+) = (.+)$/)
+  if (num) return lang === 'python' ? expr(`${num[1]} = ${num[2]}`, lang) : `int ${num[1]} = ${expr(num[2], lang)};`
+  const inc = s.match(/^(\w+)(\+\+|--)$/)
+  if (inc && lang === 'python') return `${inc[1]} ${inc[2] === '++' ? '+=' : '-='} 1`
   const decl = s.match(/^let (\w+) = (.+)$/)
   if (lang === 'python') return expr(decl ? `${decl[1]} = ${decl[2]}` : s, lang)
   const t = lang === 'cpp' ? 'Node*' : 'Node'
@@ -79,6 +96,12 @@ function translate(s: string, lang: Lang): { text: string; opens?: boolean; cont
       ? { text: `for i in range(${loop[1]}):`, opens: true }
       : { text: `for (int i = 0; i < ${loop[1]}; i++) {`, opens: true }
   }
+  const range = s.match(/^(up|down) (\w+) from (.+) to (.+):$/)
+  if (range) {
+    const [, dir, v, a, b] = range
+    if (lang === 'python') return { text: `for ${v} in range(${a}, ${b}${dir === 'down' ? ', -1' : ''}):`, opens: true }
+    return { text: `for (int ${v} = ${a}; ${v} ${dir === 'up' ? '<' : '>'} ${b}; ${v}${dir === 'up' ? '++' : '--'}) {`, opens: true }
+  }
   if (s === 'else:') {
     return lang === 'python' ? { text: 'else:', opens: true } : { text: '} else {', opens: true, continues: true }
   }
@@ -91,7 +114,7 @@ export function printAlgo(a: Algo, lang: Lang): CodeLine[] {
   if (lang === 'python') {
     out.push({ text: `def ${a.name}(${a.params.join(', ')}):` })
   } else {
-    out.push({ text: `void ${a.name}(${a.params.map((p) => `int ${p}`).join(', ')}) {` })
+    out.push({ text: `${a.ret ?? 'void'} ${a.name}(${a.params.map((p) => `int ${p}`).join(', ')}) {` })
   }
   let depth = 1
   for (const line of a.body) {
@@ -118,9 +141,9 @@ export function printAlgo(a: Algo, lang: Lang): CodeLine[] {
 }
 
 const KW: Record<Lang, Set<string>> = {
-  cpp: new Set('void int bool return if else while for new delete nullptr struct class public auto true false this break'.split(' ')),
-  java: new Set('void int boolean return if else while for new null class public true false break'.split(' ')),
-  python: new Set('def return if elif else while for in range None True False is not and or class self import from break'.split(' ')),
+  cpp: new Set('void int bool return if else while for new delete nullptr struct class public auto true false this break throw'.split(' ')),
+  java: new Set('void int boolean bool return if else while for new null class public true false break throw'.split(' ')),
+  python: new Set('def return if elif else while for in range None True False is not and or class self import from break raise'.split(' ')),
 }
 
 export function tokenize(line: string, lang: Lang): { t: string; c: string }[] {
